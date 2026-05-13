@@ -19,14 +19,11 @@ MiniFASNet 纯模型版反欺骗服务。
 - 你需要把官方 Silent-Face-Anti-Spoofing 仓库放到项目中，例如：
     your_project/
       anti_spoof_service.py
-      third_party/
+      anti_model/
         Silent-Face-Anti-Spoofing/
           src/
           resources/anti_spoof_models/
           resources/detection_model/
-
-- 如果你不想放在 third_party 下面，可以设置环境变量：
-    SILENT_FACE_ROOT=/你的/Silent-Face-Anti-Spoofing/路径
 """
 
 from __future__ import annotations
@@ -53,12 +50,12 @@ ANTI_SPOOF_ENABLED = True
 ANTI_SPOOF_DEBUG = True
 
 # MiniFASNet 项目根目录。
-# 默认读取环境变量 SILENT_FACE_ROOT；如果没有，就尝试当前项目下的 third_party/Silent-Face-Anti-Spoofing。
+# 默认读取环境变量 SILENT_FACE_ROOT；如果没有，就尝试当前项目下的 anti_model/Silent-Face-Anti-Spoofing。
 _THIS_DIR = Path(__file__).resolve().parent
 SILENT_FACE_ROOT = Path(
     os.environ.get(
         "SILENT_FACE_ROOT",
-        str(_THIS_DIR / "third_party" / "Silent-Face-Anti-Spoofing"),
+        str(_THIS_DIR / "anti_model" / "Silent-Face-Anti-Spoofing"),
     )
 ).resolve()
 
