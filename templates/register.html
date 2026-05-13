@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% block title %}注册 — 人脸识别考勤系统{% endblock %}
+{% block content %}
+<div style="max-width:480px;margin:3rem auto;">
+    <div class="card">
+        <h2 class="font-bold mb-2" style="text-align:center;">注册新账号</h2>
+        <p class="text-muted text-sm mb-2" style="text-align:center;">填写信息并提供一张清晰的正脸照片</p>
+
+        <div class="mb-1">
+            <label class="form-label">学号 <span style="color:#dc2626;">*</span></label>
+            <input id="reg-id" class="form-control" placeholder="请输入学号">
+        </div>
+        <div class="mb-1">
+            <label class="form-label">姓名 <span style="color:#dc2626;">*</span></label>
+            <input id="reg-name" class="form-control" placeholder="请输入真实姓名">
+        </div>
+        <div class="mb-1">
+            <label class="form-label">班级</label>
+            <input id="reg-class" class="form-control" placeholder="选填，例如 计算机2301">
+        </div>
+        <div class="mb-1">
+            <label class="form-label">密码 <span style="color:#dc2626;">*</span></label>
+            <input id="reg-pwd" class="form-control" type="password" placeholder="至少 6 位">
+        </div>
+        <div class="mb-2">
+            <label class="form-label">确认密码 <span style="color:#dc2626;">*</span></label>
+            <input id="reg-pwd2" class="form-control" type="password" placeholder="再次输入密码">
+        </div>
+
+        <hr class="mb-2">
+
+        <p class="font-bold mb-1">人脸照片 <span style="color:#dc2626;">*</span></p>
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchPhotoTab('upload')">上传照片</button>
+            <button class="tab-btn" onclick="switchPhotoTab('camera')">摄像头拍摄</button>
+        </div>
+
+        <!-- 上传照片 -->
+        <div class="tab-pane active" id="tab-upload">
+            <input id="reg-file" type="file" accept="image/*" class="form-control mb-1" onchange="onFilePicked(event)">
+            <div class="text-sm text-muted mb-2">支持 JPG / PNG，建议清晰正脸，单张人脸</div>
+        </div>
+
+        <!-- 摄像头拍摄 -->
+        <div class="tab-pane" id="tab-camera">
+            <div style="text-align:center;" class="mb-1">
+                <video id="reg-video" autoplay muted playsinline style="max-width:320px;border-radius:10px;background:#000;"></video>
+                <canvas id="reg-canvas" style="display:none;"></canvas>
+            </div>
+            <div class="flex gap-2 mb-1">
+                <button id="btn-cam-open" class="btn btn-outline-primary" style="flex:1;" onclick="openCamera()">打开摄像头</button>
+                <button id="btn-cam-shot" class="btn btn-primary" style="flex:1;" onclick="takePhoto()" disabled>拍照</button>
+            </div>
+        </div>
+
+        <!-- 预览 -->
+        <div id="reg-preview-wrap" class="mb-2 d-none" style="text-align:center;">
+            <p class="text-sm text-muted mb-1">已选/已拍照片预览</p>
+            <img id="reg-preview" style="max-width:200px;border-radius:8px;border:1px solid #ddd;">
+            <div>
+                <button class="btn" style="background:transparent;color:#2563eb;text-decoration:underline;padding:0;font-size:.875rem;" onclick="clearPhoto()">清除重拍</button>
+            </div>
+        </div>
+
+        <button id="btn-register" class="btn btn-primary w-full" onclick="submitRegister()">提交注册</button>
+
+        <div id="reg-error"   class="alert alert-danger mt-2 d-none"></div>
+        <div id="reg-success" class="alert alert-success mt-2 d-none"></div>
+
+        <p class="text-sm text-muted mt-2" style="text-align:center;">
+            已有账号？<a href="/">返回登录</a>
+        </p>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let regCamera = null;
+let pickedBlob = null;     // 上传文件 (File/Blob)
+let capturedB64 = null;    // 拍照得到的 base64
+
+function switchPhotoTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach((b,i) =>
+        b.classList.toggle('active', (i===0&&tab==='upload')||(i===1&&tab==='camera')));
+    document.getElementById('tab-upload').classList.toggle('active', tab==='upload');
+    document.getElementById('tab-camera').classList.toggle('active', tab==='camera');
+}
+
+function onFilePicked(e) {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    pickedBlob = f;
+    capturedB64 = null;
+    showPreviewFromBlob(f);
+}
+
+function showPreviewFromBlob(blob) {
+    const url = URL.createObjectURL(blob);
+    const img = document.getElementById('reg-preview');
+    img.onload = () => URL.revokeObjectURL(url);
+    img.src = url;
+    document.getElementById('reg-preview-wrap').classList.remove('d-none');
+}
+
+function showPreviewFromB64(b64) {
+    document.getElementById('reg-preview').src = 'data:image/jpeg;base64,' + b64;
+    document.getElementById('reg-preview-wrap').classList.remove('d-none');
+}
+
+function clearPhoto() {
+    pickedBlob = null;
+    capturedB64 = null;
+    document.getElementById('reg-file').value = '';
+    document.getElementById('reg-preview-wrap').classList.add('d-none');
+}
+
+async function openCamera() {
+    if (regCamera) return;
+    regCamera = new CameraManager(
+        document.getElementById('reg-video'),
+        document.getElementById('reg-canvas')
+    );
+    try {
+        await regCamera.start();
+        document.getElementById('btn-cam-open').disabled = true;
+        document.getElementById('btn-cam-shot').disabled = false;
+    } catch (e) {
+        regCamera = null;
+        showError('无法打开摄像头：' + (e.message || e));
+    }
+}
+
+function takePhoto() {
+    if (!regCamera) return;
+    capturedB64 = regCamera.captureFrame(0.9);
+    pickedBlob = null;
+    document.getElementById('reg-file').value = '';
+    showPreviewFromB64(capturedB64);
+}
+
+async function submitRegister() {
+    hideMessages();
+    const id   = document.getElementById('reg-id').value.trim();
+    const name = document.getElementById('reg-name').value.trim();
+    const cls  = document.getElementById('reg-class').value.trim();
+    const p1   = document.getElementById('reg-pwd').value;
+    const p2   = document.getElementById('reg-pwd2').value;
+
+    if (!id || !name || !p1) { showError('学号、姓名、密码必填'); return; }
+    if (p1.length < 6)        { showError('密码至少 6 位'); return; }
+    if (p1 !== p2)            { showError('两次密码不一致'); return; }
+    if (!pickedBlob && !capturedB64) { showError('请上传或拍摄一张人脸照片'); return; }
+
+    const btn = document.getElementById('btn-register');
+    btn.disabled = true;
+    btn.textContent = '提交中...';
+
+    try {
+        let res;
+        if (pickedBlob) {
+            const fd = new FormData();
+            fd.append('id', id);
+            fd.append('name', name);
+            fd.append('password', p1);
+            if (cls) fd.append('class_name', cls);
+            fd.append('face', pickedBlob, pickedBlob.name || 'face.jpg');
+            res = await fetch('/api/auth/register', { method: 'POST', body: fd });
+        } else {
+            res = await fetch('/api/auth/register', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    id, name, password: p1,
+                    class_name: cls || undefined,
+                    image: capturedB64,
+                }),
+            });
+        }
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+            showSuccess(data.message || '注册成功，正在跳转登录...');
+            stopCamera();
+            setTimeout(() => { window.location.href = '/'; }, 1500);
+        } else {
+            showError(data.error || `注册失败 (HTTP ${res.status})`);
+        }
+    } catch (e) {
+        showError('网络错误：' + (e.message || e));
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '提交注册';
+    }
+}
+
+function stopCamera() {
+    if (regCamera) { regCamera.stop(); regCamera = null; }
+}
+
+function showError(msg) {
+    const el = document.getElementById('reg-error');
+    el.textContent = msg;
+    el.classList.remove('d-none');
+}
+function showSuccess(msg) {
+    const el = document.getElementById('reg-success');
+    el.textContent = msg;
+    el.classList.remove('d-none');
+}
+function hideMessages() {
+    document.getElementById('reg-error').classList.add('d-none');
+    document.getElementById('reg-success').classList.add('d-none');
+}
+
+window.addEventListener('beforeunload', stopCamera);
+</script>
+{% endblock %}

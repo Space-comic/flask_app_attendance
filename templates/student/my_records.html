@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}我的考勤记录{% endblock %}
+{% block content %}
+<h2 class="font-bold mb-2">我的考勤记录</h2>
+<p class="text-muted text-sm mb-3">按日期筛选查看个人签到历史</p>
+
+<div class="card">
+    <div class="flex gap-2 flex-wrap items-center mb-2">
+        <div>
+            <label class="form-label">开始日期</label>
+            <input id="filter-date-from" type="date" class="form-control" style="width:160px;">
+        </div>
+        <div>
+            <label class="form-label">结束日期</label>
+            <input id="filter-date-to" type="date" class="form-control" style="width:160px;">
+        </div>
+        <div style="align-self:flex-end;">
+            <button class="btn btn-primary" onclick="loadRecords()">查询</button>
+        </div>
+    </div>
+
+    <span id="record-count" class="text-muted text-sm mb-1" style="display:block;"></span>
+    <div style="overflow-x:auto;">
+        <table class="table">
+            <thead>
+                <tr><th>日期</th><th>签到时间</th><th>状态</th><th>方式</th></tr>
+            </thead>
+            <tbody id="records-tbody"></tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', loadRecords);
+
+async function loadRecords() {
+    const p = new URLSearchParams();
+    const df = document.getElementById('filter-date-from').value;
+    const dt = document.getElementById('filter-date-to').value;
+    if (df) p.set('date_from', df);
+    if (dt) p.set('date_to', dt);
+
+    const res = await apiFetch(`/api/attendance/records?${p}`);
+    if (!res) return;
+    const data = await res.json();
+
+    const statusMap = {present: '已签到', absent: '缺勤'};
+    const methodMap = {face: '人脸识别', manual: '手动'};
+
+    document.getElementById('records-tbody').innerHTML = (data.records || []).map(r => `
+        <tr>
+            <td>${r.date || ''}</td>
+            <td>${r.check_time ? r.check_time.slice(11,19) : ''}</td>
+            <td><span class="badge bg-success">${statusMap[r.status] || r.status}</span></td>
+            <td>${methodMap[r.method] || r.method}</td>
+        </tr>`).join('');
+    document.getElementById('record-count').textContent = `共 ${data.total || 0} 条`;
+}
+</script>
+{% endblock %}

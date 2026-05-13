@@ -1,0 +1,149 @@
+﻿{% extends "base.html" %}
+{% block title %}个人中心{% endblock %}
+{% block content %}
+<h2 class="font-bold mb-2">个人中心</h2>
+<p class="text-muted text-sm mb-3">查看账号信息与安全设置</p>
+
+<div class="grid-2">
+    <div class="card">
+        <h3 class="font-bold mb-2">基本信息</h3>
+        <div id="profile-loading" class="text-muted text-sm">加载中...</div>
+        <table class="table" id="profile-table" style="display:none;">
+            <tbody>
+                <tr><th style="width:30%;">学号</th><td id="pf-id"></td></tr>
+                <tr><th>姓名</th><td id="pf-name"></td></tr>
+                <tr><th>角色</th><td id="pf-role"></td></tr>
+                <tr><th>班级</th><td id="pf-class"></td></tr>
+                <tr><th>性别</th><td id="pf-gender"></td></tr>
+                <tr><th>年龄</th><td id="pf-age"></td></tr>
+                <tr><th>籍贯</th><td id="pf-address"></td></tr>
+                <tr><th>民族</th><td id="pf-ethnicity"></td></tr>
+                <tr><th>人脸状态</th><td id="pf-face"></td></tr>
+                <tr><th>注册时间</th><td id="pf-created"></td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h3 class="font-bold mb-2">人脸照片</h3>
+        <div id="face-preview-wrap" class="text-muted text-sm">加载中...</div>
+    </div>
+</div>
+
+<div class="card mt-2">
+    <h3 class="font-bold mb-2">修改密码</h3>
+    <div class="grid-2">
+        <div>
+            <label class="form-label">旧密码</label>
+            <input id="old-password" type="password" class="form-control" placeholder="请输入旧密码">
+        </div>
+        <div>
+            <label class="form-label">新密码</label>
+            <input id="new-password" type="password" class="form-control" placeholder="至少 6 位">
+        </div>
+    </div>
+    <div class="mt-1" style="max-width:420px;">
+        <label class="form-label">确认新密码</label>
+        <input id="confirm-password" type="password" class="form-control" placeholder="请再次输入新密码">
+    </div>
+    <div class="mt-2">
+        <button id="btn-change-password" class="btn btn-primary">保存新密码</button>
+    </div>
+    <div id="pwd-msg" class="text-sm mt-1"></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadProfile();
+    document.getElementById('btn-change-password')?.addEventListener('click', changePassword);
+});
+
+async function loadProfile() {
+    const res = await apiFetch('/api/auth/me');
+    if (!res) return;
+    const u = await res.json();
+    if (!res.ok) {
+        document.getElementById('profile-loading').textContent = u.error || '加载失败';
+        return;
+    }
+
+    document.getElementById('profile-loading').style.display = 'none';
+    document.getElementById('profile-table').style.display = 'table';
+    document.getElementById('pf-id').textContent = u.id || '';
+    document.getElementById('pf-name').textContent = u.name || '';
+    document.getElementById('pf-role').innerHTML = u.role === 'teacher'
+        ? '<span class="badge bg-warning">教师</span>'
+        : '<span class="badge bg-primary">学生</span>';
+    document.getElementById('pf-class').textContent = u.class_name || '—';
+    document.getElementById('pf-gender').textContent = u.gender || '—';
+    document.getElementById('pf-age').textContent = u.age || '—';
+    document.getElementById('pf-address').textContent = u.address || '—';
+    document.getElementById('pf-ethnicity').textContent = u.ethnicity || '—';
+    document.getElementById('pf-face').innerHTML = u.face_image
+        ? '<span class="badge bg-success">已录入</span>'
+        : '<span class="badge bg-secondary">未录入</span>';
+    document.getElementById('pf-created').textContent =
+        u.created_at ? u.created_at.slice(0, 19).replace('T', ' ') : '';
+
+    const wrap = document.getElementById('face-preview-wrap');
+    if (u.face_image) {
+        wrap.innerHTML = `<img src="/face-images/${encodeURIComponent(u.face_image)}?t=${Date.now()}"
+            alt="人脸"
+            style="max-width:260px;max-height:320px;border-radius:12px;border:1px solid var(--border);object-fit:cover;">`;
+    } else {
+        wrap.innerHTML = '<div class="text-muted text-sm">尚未上传人脸照片，请联系管理员录入。</div>';
+    }
+}
+
+async function changePassword() {
+    const oldPwd = document.getElementById('old-password').value || '';
+    const newPwd = document.getElementById('new-password').value || '';
+    const confirmPwd = document.getElementById('confirm-password').value || '';
+    const msg = document.getElementById('pwd-msg');
+    msg.textContent = '';
+
+    if (!oldPwd || !newPwd || !confirmPwd) {
+        msg.textContent = '请完整填写密码信息';
+        msg.style.color = '#dc2626';
+        return;
+    }
+    if (newPwd.length < 6) {
+        msg.textContent = '新密码至少 6 位';
+        msg.style.color = '#dc2626';
+        return;
+    }
+    if (newPwd !== confirmPwd) {
+        msg.textContent = '两次输入的新密码不一致';
+        msg.style.color = '#dc2626';
+        return;
+    }
+
+    const btn = document.getElementById('btn-change-password');
+    btn.disabled = true;
+    try {
+        const res = await apiFetch('/api/auth/change-password', {
+            method: 'POST',
+            body: JSON.stringify({ old_password: oldPwd, new_password: newPwd }),
+        });
+        if (!res) return;
+        const data = await res.json();
+        if (res.ok) {
+            msg.textContent = data.message || '密码修改成功';
+            msg.style.color = '#16a34a';
+            document.getElementById('old-password').value = '';
+            document.getElementById('new-password').value = '';
+            document.getElementById('confirm-password').value = '';
+        } else {
+            msg.textContent = data.error || '密码修改失败';
+            msg.style.color = '#dc2626';
+        }
+    } catch (_) {
+        msg.textContent = '请求失败，请稍后重试';
+        msg.style.color = '#dc2626';
+    } finally {
+        btn.disabled = false;
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% block title %}管理员控制台{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+{% block content %}
+<div class="flex justify-between items-center mb-3" style="flex-wrap:wrap;gap:1rem;">
+    <div>
+        <h2 class="font-bold">管理员控制台</h2>
+        <p class="text-muted text-sm">系统总览 · 快捷入口 · 今日动态</p>
+    </div>
+    <div class="flex gap-2">
+        <button class="btn btn-outline-primary btn-sm" onclick="refreshAll()">刷新</button>
+    </div>
+</div>
+
+<!-- 统计卡 -->
+<div class="grid-4 mb-3">
+    <div class="card stat-card">
+        <div class="stat-value" id="stat-students">—</div>
+        <div class="stat-label">注册学生数</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-value" id="stat-teachers">—</div>
+        <div class="stat-label">教师账号数</div>
+    </div>
+    <div class="card stat-card stat-success">
+        <div class="stat-value" id="stat-today">—</div>
+        <div class="stat-label">今日签到人数</div>
+    </div>
+    <div class="card stat-card stat-warning">
+        <div class="stat-value" id="stat-activities">—</div>
+        <div class="stat-label">活动总数</div>
+    </div>
+</div>
+
+<!-- 快捷入口 -->
+<div class="card mb-3">
+    <h3 class="font-bold mb-2">快捷入口</h3>
+    <div class="flex gap-2 flex-wrap">
+        <a href="/admin/users" class="btn btn-primary">用户管理</a>
+        <a href="/admin/attendance-records" class="btn btn-outline-primary">考勤记录</a>
+        <a href="/attendance" class="btn btn-outline-primary">刷脸签到</a>
+        <a href="/group-photo" class="btn btn-outline-primary">合照识别</a>
+        <a href="/emotion-stats" class="btn btn-outline-primary">情绪统计</a>
+        <a href="/register" class="btn btn-outline-primary">新建注册</a>
+    </div>
+</div>
+
+<div class="grid-2 mb-3">
+    <!-- 今日签到情况 -->
+    <div class="card">
+        <h3 class="font-bold mb-2">今日签到情况</h3>
+        <div id="today-summary" class="text-muted text-sm mb-2">加载中...</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+            <span class="text-sm text-muted">签到进度</span>
+            <span id="today-percent" class="font-bold" style="color:var(--primary);">0%</span>
+        </div>
+        <div style="height:10px;background:var(--border-soft);border-radius:999px;overflow:hidden;">
+            <div id="today-bar" style="width:0%;height:100%;background:linear-gradient(90deg,var(--primary-light),var(--primary));transition:width .35s;"></div>
+        </div>
+        <div id="today-list" class="mt-2"></div>
+    </div>
+
+    <!-- 情绪分布总览 -->
+    <div class="card">
+        <h3 class="font-bold mb-2">全校情绪分布</h3>
+        <canvas id="emotion-chart" height="180"></canvas>
+    </div>
+</div>
+
+<div class="grid-2">
+    <!-- 最近活动 -->
+    <div class="card">
+        <h3 class="font-bold mb-2">最近合照活动</h3>
+        <table class="table">
+            <thead><tr><th>活动名称</th><th>人数</th><th>时间</th></tr></thead>
+            <tbody id="recent-activities"><tr><td colspan="3" class="text-muted text-center">加载中...</td></tr></tbody>
+        </table>
+    </div>
+
+    <!-- 系统提示 -->
+    <div class="card">
+        <h3 class="font-bold mb-2">系统提示</h3>
+        <ul style="line-height:2;padding-left:1.2rem;color:var(--text-soft);">
+            <li>在<a href="/admin/users">用户管理</a>中可批量导入照片（支持「学号-姓名.jpg」）</li>
+            <li>考勤记录可按学号、日期筛选并一键<a href="/admin/attendance-records">导出 Excel</a></li>
+            <li>合照识别支持 10-50 人团体照，自动生成参与名单</li>
+            <li>情绪数据会在每次签到和合照识别时自动记录</li>
+            <li>活体检测结合眨眼/张嘴/头部动作，防照片和屏幕重放</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const EMOTION_LABELS = {
+    angry: '愤怒', disgust: '厌恶', fear: '恐惧',
+    happy: '快乐', neutral: '平静', sad: '悲伤', surprise: '惊讶'
+};
+const EMOTION_COLORS = ['#EF4444','#F97316','#EAB308','#22C55E','#3B82F6','#8B5CF6','#EC4899'];
+
+document.addEventListener('DOMContentLoaded', refreshAll);
+
+async function refreshAll() {
+    await Promise.all([
+        loadStats(),
+        loadToday(),
+        loadEmotion(),
+        loadRecentActivities(),
+    ]);
+}
+
+async function loadStats() {
+    const [students, teachers, activities] = await Promise.all([
+        apiFetch('/api/users?role=student&per_page=1'),
+        apiFetch('/api/users?role=teacher&per_page=1'),
+        apiFetch('/api/group-photo/activities?per_page=1'),
+    ]);
+    if (students) { const d = await students.json(); document.getElementById('stat-students').textContent = d.total || 0; }
+    if (teachers) { const d = await teachers.json(); document.getElementById('stat-teachers').textContent = d.total || 0; }
+    if (activities) { const d = await activities.json(); document.getElementById('stat-activities').textContent = d.total || 0; }
+}
+
+async function loadToday() {
+    const res = await apiFetch('/api/attendance/today-status');
+    if (!res) return;
+    const d = await res.json();
+    const checked = d.checked_count || 0;
+    const total = d.total_students || 0;
+    const pct = total > 0 ? Math.round(checked / total * 100) : 0;
+
+    document.getElementById('stat-today').textContent = checked;
+    document.getElementById('today-summary').textContent =
+        `今日已签到 ${checked} / ${total} 名学生`;
+    document.getElementById('today-percent').textContent = `${pct}%`;
+    document.getElementById('today-bar').style.width = `${pct}%`;
+
+    const list = d.checked_in || [];
+    const listEl = document.getElementById('today-list');
+    if (!list.length) {
+        listEl.innerHTML = '<div class="text-muted text-sm">暂无签到记录</div>';
+    } else {
+        const shown = list.slice(0, 6);
+        listEl.innerHTML = '<div class="text-sm text-muted mb-1">最近签到：</div>' +
+            shown.map(r => `<div style="display:flex;justify-content:space-between;padding:.35rem 0;border-bottom:1px dashed var(--border-soft);font-size:.85rem;">
+                <span>${r.student_name} <span class="text-muted">(${r.student_id})</span></span>
+                <span class="text-muted">${(r.check_time || '').slice(11,19)}</span>
+            </div>`).join('') +
+            (list.length > shown.length ? `<div class="text-muted text-sm mt-1">还有 ${list.length - shown.length} 人...</div>` : '');
+    }
+}
+
+async function loadEmotion() {
+    const res = await apiFetch('/api/emotion/stats');
+    if (!res) return;
+    const d = await res.json();
+    const dist = d.distribution || {};
+    const labels = Object.keys(dist).map(k => EMOTION_LABELS[k] || k);
+    const values = Object.values(dist);
+
+    const ctx = document.getElementById('emotion-chart');
+    if (!ctx) return;
+    if (window._emotionChart) window._emotionChart.destroy();
+    window._emotionChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data: values, backgroundColor: EMOTION_COLORS }] },
+        options: { responsive: true, plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } } } },
+    });
+}
+
+async function loadRecentActivities() {
+    const res = await apiFetch('/api/group-photo/activities?per_page=5');
+    if (!res) return;
+    const d = await res.json();
+    const rows = d.activities || [];
+    const tbody = document.getElementById('recent-activities');
+    if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="3" class="text-muted text-center">暂无活动记录</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map(a => `<tr>
+        <td>${a.name || '未命名活动'}</td>
+        <td><span class="badge bg-primary">${a.participant_count || 0} 人</span></td>
+        <td class="text-muted text-sm">${(a.created_at || '').slice(0, 19).replace('T', ' ')}</td>
+    </tr>`).join('');
+}
+</script>
+{% endblock %}

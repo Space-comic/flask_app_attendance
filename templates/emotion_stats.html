@@ -1,0 +1,73 @@
+﻿{% extends "base.html" %}
+{% block title %}情绪统计{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+{% block content %}
+<h2 class="font-bold mb-2">情绪分析统计</h2>
+
+<div class="card">
+    <div class="flex gap-2 flex-wrap items-center">
+        <div>
+            <label class="form-label">学号</label>
+            <input id="filter-student" class="form-control" placeholder="全部学生" style="width:140px;">
+        </div>
+        <div>
+            <label class="form-label">开始日期</label>
+            <input id="filter-date-from" type="date" class="form-control" style="width:160px;">
+        </div>
+        <div>
+            <label class="form-label">结束日期</label>
+            <input id="filter-date-to" type="date" class="form-control" style="width:160px;">
+        </div>
+        <div>
+            <label class="form-label">来源</label>
+            <select id="filter-source" class="form-control" style="width:130px;">
+                <option value="">全部</option>
+                <option value="attendance">考勤</option>
+                <option value="group_photo">合照</option>
+            </select>
+        </div>
+        <div style="align-self:flex-end;">
+            <button id="btn-filter" class="btn btn-primary">查询</button>
+            <button id="btn-export" class="btn btn-success">导出Excel</button>
+        </div>
+    </div>
+</div>
+
+<div class="grid-2">
+    <div class="card">
+        <h3 class="font-bold mb-2">概览</h3>
+        <div id="emotion-summary" class="grid-2 mb-2"></div>
+        <div id="emotion-top" class="text-sm text-muted"></div>
+    </div>
+    <div class="card">
+        <h3 class="font-bold mb-2">情绪分布（饼图）</h3>
+        <canvas id="emotion-pie" height="260"></canvas>
+    </div>
+</div>
+
+<div class="card">
+    <div class="flex justify-between items-center mb-1" style="flex-wrap:wrap;gap:1rem;">
+        <h3 class="font-bold">情绪记录明细</h3>
+        <div class="flex gap-2" id="emotion-bulk-toolbar" style="display:none;">
+            <span id="emotion-bulk-selected" class="text-sm text-muted" style="align-self:center;">已选 0 条</span>
+            <button id="btn-emotion-bulk-delete" class="btn btn-sm btn-outline-danger" disabled onclick="bulkDeleteEmotion()">批量删除</button>
+        </div>
+    </div>
+    <div id="emotion-table-wrap" style="overflow-x:auto;">
+        <table class="table">
+            <thead id="emotion-thead">
+                <tr><th>学号</th><th>姓名</th><th>时间</th><th>情绪</th><th>来源</th></tr>
+            </thead>
+            <tbody id="emotion-tbody"></tbody>
+        </table>
+    </div>
+    <div class="mt-1">
+        <button id="btn-toggle-emotion-table" class="btn btn-outline-primary btn-sm">收起明细</button>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/emotion.js"></script>
+{% endblock %}

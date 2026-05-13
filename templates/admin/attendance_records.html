@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}考勤记录{% endblock %}
+{% block content %}
+<h2 class="font-bold mb-2">考勤记录查询</h2>
+<div class="card">
+    <div class="flex gap-2 flex-wrap items-center">
+        <div>
+            <label class="form-label">学号</label>
+            <input id="filter-student" class="form-control" placeholder="全部" style="width:140px;">
+        </div>
+        <div>
+            <label class="form-label">开始日期</label>
+            <input id="filter-date-from" type="date" class="form-control" style="width:160px;">
+        </div>
+        <div>
+            <label class="form-label">结束日期</label>
+            <input id="filter-date-to" type="date" class="form-control" style="width:160px;">
+        </div>
+        <div style="align-self:flex-end;">
+            <button class="btn btn-primary" onclick="loadRecords()">查询</button>
+            <button class="btn btn-success" onclick="exportExcel()">导出Excel</button>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="flex justify-between items-center mb-1" style="flex-wrap:wrap;gap:1rem;">
+        <span id="record-count" class="text-muted text-sm"></span>
+        <div class="flex gap-2" id="bulk-toolbar">
+            <span id="bulk-selected" class="text-sm text-muted" style="align-self:center;">已选 0 条</span>
+            <button id="btn-bulk-delete" class="btn btn-sm btn-outline-danger" disabled onclick="bulkDelete()">批量删除</button>
+        </div>
+    </div>
+    <div style="overflow-x:auto;">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th style="width:32px;"><input type="checkbox" id="check-all"></th>
+                    <th>学号</th><th>姓名</th><th>日期</th><th>签到时间</th><th>状态</th><th>方式</th><th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="records-tbody"></tbody>
+        </table>
+    </div>
+    <div id="pagination" class="flex gap-2 mt-2"></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let currentPage = 1;
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadRecords();
+    document.getElementById('check-all').addEventListener('change', (e) => {
+        document.querySelectorAll('.row-check').forEach(c => c.checked = e.target.checked);
+        updateBulkBar();
+    });
+});
+
+async function loadRecords(page = 1) {
+    currentPage = page;
+    const params = buildParams(page);
+    const res    = await apiFetch(`/api/attendance/records?${params}`);
+    if (!res) return;
+    const data   = await res.json();
+
+    const statusMap = {present: '已签到', absent: '缺勤'};
+    const methodMap = {face: '人脸识别', manual: '手动'};
+
+    document.getElementById('records-tbody').innerHTML = (data.records || []).map(r => `
+        <tr>
+            <td><input type="checkbox" class="row-check" data-id="${r.id}"></td>
+            <td>${r.student_id}</td>
+            <td>${r.student_name}</td>
+            <td>${r.date || ''}</td>
+            <td>${r.check_time ? r.check_time.slice(11,19) : ''}</td>
+            <td><span class="badge bg-success">${statusMap[r.status] || r.status}</span></td>
+            <td>${methodMap[r.method] || r.method}</td>
+            <td><button class="btn btn-sm btn-outline-danger" onclick="deleteOne(${r.id})">删除</button></td>
+        </tr>`).join('');
+
+    document.getElementById('record-count').textContent = `共 ${data.total || 0} 条`;
+    renderPagination(data.pages, page);
+
+    document.querySelectorAll('.row-check').forEach(cb => cb.addEventListener('change', updateBulkBar));
+    document.getElementById('check-all').checked = false;
+    updateBulkBar();
+}
+
+function renderPagination(pages, current) {
+    const el = document.getElementById('pagination');
+    if (!pages || pages <= 1) { el.innerHTML = ''; return; }
+    let html = '';
+    for (let i = 1; i <= pages; i++) {
+        html += `<button class="btn btn-sm ${i===current?'btn-primary':'btn-outline-primary'}" onclick="loadRecords(${i})">${i}</button>`;
+    }
+    el.innerHTML = html;
+}
+
+function buildParams(page) {
+    const p = new URLSearchParams();
+    const sid = document.getElementById('filter-student').value;
+    const df  = document.getElementById('filter-date-from').value;
+    const dt  = document.getElementById('filter-date-to').value;
+    if (sid) p.set('student_id', sid);
+    if (df)  p.set('date_from', df);
+    if (dt)  p.set('date_to', dt);
+    p.set('page', page);
+    return p.toString();
+}
+
+function exportExcel() {
+    const p = new URLSearchParams();
+    const sid = document.getElementById('filter-student').value;
+    const df  = document.getElementById('filter-date-from').value;
+    const dt  = document.getElementById('filter-date-to').value;
+    if (sid) p.set('student_id', sid);
+    if (df)  p.set('date_from', df);
+    if (dt)  p.set('date_to', dt);
+    const qs = p.toString();
+    downloadFile(`/api/attendance/export${qs ? '?' + qs : ''}`, '考勤记录.xlsx');
+}
+
+function updateBulkBar() {
+    const n = document.querySelectorAll('.row-check:checked').length;
+    document.getElementById('bulk-selected').textContent = `已选 ${n} 条`;
+    document.getElementById('btn-bulk-delete').disabled = n === 0;
+}
+
+async function deleteOne(id) {
+    if (!confirm('确定删除这条考勤记录吗？')) return;
+    const res = await apiFetch(`/api/attendance/records/${id}`, {method: 'DELETE'});
+    if (!res) return;
+    if (res.ok) { loadRecords(currentPage); }
+    else { const d = await res.json(); alert(d.error || '删除失败'); }
+}
+
+async function bulkDelete() {
+    const ids = Array.from(document.querySelectorAll('.row-check:checked')).map(c => parseInt(c.dataset.id, 10));
+    if (!ids.length) return;
+    if (!confirm(`确定删除选中的 ${ids.length} 条记录？`)) return;
+    const res = await apiFetch('/api/attendance/records/batch-delete', {
+        method: 'POST',
+        body: JSON.stringify({ids}),
+    });
+    if (!res) return;
+    const d = await res.json();
+    if (res.ok) { alert(`已删除 ${d.deleted || 0} 条`); loadRecords(currentPage); }
+    else { alert(d.error || '删除失败'); }
+}
+</script>
+{% endblock %}

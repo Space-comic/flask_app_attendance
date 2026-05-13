@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}合照识别{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<h2 class="font-bold mb-2">合照人脸识别</h2>
+
+<div class="grid-2">
+    <div class="card">
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('file')">上传图片</button>
+            <button class="tab-btn" onclick="switchTab('camera')">摄像头拍照</button>
+        </div>
+
+        <div class="tab-pane active" id="tab-file">
+            <div class="mb-1">
+                <label class="form-label">活动名称</label>
+                <input id="activity-name-file" class="form-control" placeholder="例如：2026 春季运动会">
+            </div>
+            <div class="mb-2">
+                <label class="form-label">选择合照（JPG/PNG）</label>
+                <input id="photo-file" type="file" accept="image/*" class="form-control">
+            </div>
+            <button id="btn-recognize-file" class="btn btn-primary">开始识别</button>
+        </div>
+
+        <div class="tab-pane" id="tab-camera">
+            <div class="mb-1">
+                <label class="form-label">活动名称</label>
+                <input id="activity-name-camera" class="form-control" placeholder="例如：2026 春季运动会">
+            </div>
+            <video id="video" autoplay muted playsinline class="mb-1"></video>
+            <canvas id="canvas" style="display:none;"></canvas>
+
+            <div class="flex gap-2 mt-1">
+                <button id="btn-start-camera" class="btn btn-outline-primary">开启摄像头</button>
+                <button id="btn-capture" class="btn btn-primary">拍照</button>
+            </div>
+
+            <div id="preview-section" class="mt-2 d-none">
+                <img id="preview-img" class="img-fluid rounded mb-1" style="max-height:220px;">
+                <input id="captured-b64" type="hidden">
+                <button id="btn-recognize-camera" class="btn btn-success">识别当前照片</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3 class="font-bold mb-2">识别结果</h3>
+        <div id="loading" class="alert alert-info d-none">识别中，请稍候...</div>
+        <div id="result-section">
+            <div class="alert alert-info">上传或拍摄合照后点击识别</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-2">
+    <div class="flex justify-between items-center mb-2">
+        <h3 class="font-bold">活动记录</h3>
+        <button class="btn btn-outline-primary" onclick="exportStats()">导出参与统计</button>
+    </div>
+    <div style="overflow-x:auto;">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>活动名称</th>
+                    <th>参与人数</th>
+                    <th>时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="activities-tbody"></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="grid-2 mt-2">
+    <div class="card">
+        <h3 class="font-bold mb-2">活动参与名单</h3>
+        <div class="text-sm text-muted mb-1" id="participants-title">请先在活动记录中点击“名单”</div>
+        <div style="overflow-x:auto;">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>序号</th>
+                        <th>学号</th>
+                        <th>姓名</th>
+                    </tr>
+                </thead>
+                <tbody id="participants-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3 class="font-bold mb-2">参与次数统计</h3>
+        <canvas id="stats-chart" height="220"></canvas>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/group_photo.js"></script>
+<script>
+function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach((b, i) =>
+        b.classList.toggle('active', (i === 0 && tab === 'file') || (i === 1 && tab === 'camera'))
+    );
+    document.getElementById('tab-file').classList.toggle('active', tab === 'file');
+    document.getElementById('tab-camera').classList.toggle('active', tab === 'camera');
+}
+</script>
+{% endblock %}

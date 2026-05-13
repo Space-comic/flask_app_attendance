@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}人脸识别考勤系统{% endblock %}</title>
+<link rel="stylesheet" href="/static/css/style.css">
+{% block head %}{% endblock %}
+</head>
+<body>
+<nav class="navbar" id="site-navbar">
+    <a class="navbar-brand" href="/" id="nav-brand">人脸识别考勤系统</a>
+    <ul class="navbar-nav" id="nav-links">
+        <li id="nav-attendance" class="d-none"><a href="/attendance">签到</a></li>
+        <li id="nav-users"      class="d-none"><a href="/admin/users">用户管理</a></li>
+        <li id="nav-att-records" class="d-none"><a href="/admin/attendance-records">考勤记录</a></li>
+        <li id="nav-group"      class="d-none"><a href="/group-photo">合照识别</a></li>
+        <li id="nav-emotion"    class="d-none"><a href="/emotion-stats">情绪统计</a></li>
+        <li id="nav-records"    class="d-none"><a href="/student/my-records">考勤记录</a></li>
+        <li id="nav-user"       class="d-none"><a href="#" id="nav-username">控制台</a></li>
+        <li id="nav-logout"     class="d-none"><a href="#" onclick="logout()">退出</a></li>
+    </ul>
+</nav>
+<div class="container">
+{% block content %}{% endblock %}
+</div>
+<script src="/static/js/camera.js"></script>
+{% block scripts %}{% endblock %}
+<script>
+(function initNav() {
+    const path = window.location.pathname;
+    // 登录页、注册页等公开页面直接隐藏顶栏，避免看起来像已登录。
+    const publicPages = ['/', '/register'];
+    if (publicPages.includes(path)) {
+        const bar = document.getElementById('site-navbar');
+        if (bar) bar.style.display = 'none';
+        return;
+    }
+
+    const token = localStorage.getItem('token');
+    if (!token) {
+        // 无 token 却访问受保护页：直接送回登录
+        window.location.href = '/';
+        return;
+    }
+
+    let payload;
+    try {
+        payload = JSON.parse(atob(token.split('.')[1]));
+    } catch (e) {
+        localStorage.removeItem('token');
+        window.location.href = '/';
+        return;
+    }
+
+    // 过期判断（JWT exp 是秒级）
+    if (payload.exp && payload.exp * 1000 < Date.now()) {
+        localStorage.removeItem('token');
+        window.location.href = '/';
+        return;
+    }
+
+    const role = payload.role;
+    const userLink = document.getElementById('nav-username');
+    if (role === 'teacher') {
+        userLink.textContent = '控制台';
+        userLink.href = '/admin/dashboard';
+    } else {
+        userLink.textContent = '个人中心';
+        userLink.href = '/student/profile';
+    }
+    const brand = document.getElementById('nav-brand');
+    if (brand) brand.href = (role === 'teacher') ? '/admin/dashboard' : '/attendance';
+
+    document.getElementById('nav-user').classList.remove('d-none');
+    document.getElementById('nav-logout').classList.remove('d-none');
+    document.getElementById('nav-attendance').classList.remove('d-none');
+    document.getElementById('nav-emotion').classList.remove('d-none');
+    if (role === 'teacher') {
+        document.getElementById('nav-users').classList.remove('d-none');
+        document.getElementById('nav-att-records').classList.remove('d-none');
+        document.getElementById('nav-group').classList.remove('d-none');
+    } else {
+        document.getElementById('nav-records').classList.remove('d-none');
+    }
+})();
+function logout() {
+    localStorage.removeItem('token');
+    window.location.href = '/';
+}
+</script>
+</body>
+</html>

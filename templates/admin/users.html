@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% block title %}用户管理{% endblock %}
+{% block content %}
+<div class="flex justify-between items-center mb-2">
+    <h2 class="font-bold">用户管理</h2>
+    <div class="flex gap-2">
+        <button class="btn btn-primary" id="btn-add">新增用户</button>
+        <button class="btn btn-outline-primary" id="btn-open-batch">批量导入学生</button>
+    </div>
+</div>
+
+<div class="card">
+    <div class="tabs" id="role-tabs">
+        <button class="tab-btn active" data-role="">全部</button>
+        <button class="tab-btn" data-role="student">学生</button>
+        <button class="tab-btn" data-role="teacher">教师</button>
+    </div>
+
+    <div class="flex gap-2 mb-2" style="flex-wrap:wrap;align-items:center;">
+        <input id="search-input" class="form-control" placeholder="搜索学号/姓名/班级" autocomplete="off" style="max-width:260px;">
+        <button id="btn-search" class="btn btn-outline-primary">搜索</button>
+        <button id="btn-clear-search" class="btn btn-outline-primary">清空</button>
+        <span id="user-count" class="text-muted text-sm" style="align-self:center;"></span>
+
+        <div id="bulk-actions" class="flex gap-2" style="margin-left:auto;align-items:center;">
+            <span id="bulk-selected" class="text-sm text-muted">已选 0 项</span>
+            <button id="btn-bulk-update" class="btn btn-sm btn-outline-primary" disabled>批量编辑</button>
+            <button id="btn-bulk-delete" class="btn btn-sm btn-outline-danger" disabled>批量删除</button>
+        </div>
+    </div>
+    <div style="overflow-x:auto;">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th style="width:32px;">
+                        <input type="checkbox" id="check-all" title="全选/全不选">
+                    </th>
+                    <th>学号</th><th>姓名</th><th>班级</th><th>角色</th><th>性别</th><th>年龄</th><th>籍贯</th><th>民族</th><th>人脸</th><th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="users-tbody"></tbody>
+        </table>
+    </div>
+    <div id="users-pagination" class="flex gap-2 mt-2" style="flex-wrap:wrap;align-items:center;"></div>
+</div>
+
+<!-- 新增/编辑弹窗 -->
+<div class="modal-overlay" id="user-modal">
+    <div class="modal-box">
+        <div class="modal-header">
+            <span class="modal-title" id="modal-title">新增用户</span>
+            <button class="modal-close" onclick="closeModal()">×</button>
+        </div>
+        <form id="user-form">
+            <div class="mb-1">
+                <label class="form-label">学号 *</label>
+                <input id="field-id" class="form-control" required>
+            </div>
+            <div class="mb-1">
+                <label class="form-label">姓名 *</label>
+                <input id="field-name" class="form-control" required>
+            </div>
+            <div class="mb-1">
+                <label class="form-label">密码（新增必填，编辑留空不修改）</label>
+                <input id="field-password" class="form-control" type="password">
+            </div>
+            <div class="mb-1">
+                <label class="form-label">角色</label>
+                <select id="field-role" class="form-control">
+                    <option value="student">学生</option>
+                    <option value="teacher">教师</option>
+                </select>
+            </div>
+            <div class="mb-1">
+                <label class="form-label">性别</label>
+                <select id="field-gender" class="form-control">
+                    <option value="">—</option>
+                    <option value="男">男</option>
+                    <option value="女">女</option>
+                </select>
+            </div>
+            <div class="mb-1">
+                <label class="form-label">年龄</label>
+                <input id="field-age" class="form-control" type="number" min="1" max="100">
+            </div>
+            <div class="mb-1">
+                <label class="form-label">班级</label>
+                <input id="field-class" class="form-control" placeholder="例如：软工 2022-1 班">
+            </div>
+            <div class="mb-1">
+                <label class="form-label">籍贯</label>
+                <input id="field-address" class="form-control">
+            </div>
+            <div class="mb-2">
+                <label class="form-label">民族</label>
+                <input id="field-ethnicity" class="form-control">
+            </div>
+            <div class="mb-2">
+                <label class="form-label">人脸照片（可选，JPG/PNG）</label>
+                <div id="face-preview-wrap" class="mb-1" style="display:none;">
+                    <img id="face-preview" alt="人脸预览"
+                         style="max-width:160px;max-height:160px;border-radius:8px;border:1px solid var(--border);object-fit:cover;">
+                    <div class="text-sm text-muted mt-1" id="face-preview-hint">当前已录入的人脸</div>
+                </div>
+                <input id="field-face-file" type="file" accept="image/*" class="form-control">
+                <div class="text-sm text-muted mt-1">新增时可上传，编辑时可重新上传覆盖。</div>
+            </div>
+            <div class="flex gap-2">
+                <button type="button" id="btn-save-user" class="btn btn-primary">保存</button>
+                <button type="button" class="btn btn-outline-primary" onclick="closeModal()">取消</button>
+            </div>
+        </form>
+    </div>
+</div>
+<!-- 批量导入弹窗 -->
+<div class="modal-overlay" id="batch-modal">
+    <div class="modal-box">
+        <div class="modal-header">
+            <span class="modal-title">批量导入学生</span>
+            <button class="modal-close" onclick="closeBatchModal()">×</button>
+        </div>
+
+        <div class="alert alert-info mb-2" style="font-size:13px;line-height:1.6;">
+            支持两种上传方式（任选一种或同时使用）：<br>
+            • <strong>多张图片</strong>：直接选择文件夹中的若干张照片<br>
+            • <strong>ZIP 压缩包</strong>：内含若干照片，可选附带 <code>students.csv</code> / <code>students.xlsx</code><br>
+            <br>
+            <strong>照片文件名建议格式</strong>（最多 4 段，按 <code>-</code> / <code>_</code> / 空格分隔）：<br>
+            • <strong>学号-姓名-班级-性别.jpg</strong>（推荐，最完整）<br>
+            • <strong>学号-姓名-班级.jpg</strong> 省略性别<br>
+            • <strong>学号-姓名.jpg</strong> 只取学号与姓名<br>
+            • <strong>学号.jpg</strong> 仅凭学号创建，姓名默认用学号<br>
+            （CSV/Excel 中的 <code>name/姓名</code>、<code>class_name/班级</code>、<code>gender/性别</code>、<code>password</code> 会覆盖对应字段）
+        </div>
+
+        <div class="mb-1">
+            <label class="form-label">默认班级（CSV 未指定时使用）</label>
+            <input id="batch-default-class" class="form-control" placeholder="可留空">
+        </div>
+        <div class="mb-2">
+            <label class="form-label">默认密码（CSV 未指定时使用）</label>
+            <input id="batch-default-password" class="form-control" value="123456">
+        </div>
+        <div class="mb-2">
+            <label class="form-label">方式 A：选择多张图片（可一次选中多张照片）</label>
+            <input id="batch-photos" type="file" accept="image/*" multiple class="form-control">
+            <div class="text-sm text-muted mt-1" id="batch-photos-count"></div>
+        </div>
+        <div class="mb-2">
+            <label class="form-label">方式 B：上传 ZIP 压缩包</label>
+            <input id="batch-file" type="file" accept=".zip" class="form-control">
+        </div>
+
+        <div id="batch-result" class="mb-2" style="display:none;"></div>
+
+        <div class="flex gap-2">
+            <button type="button" id="btn-do-batch" class="btn btn-primary">开始导入</button>
+            <button type="button" class="btn btn-outline-primary" onclick="closeBatchModal()">关闭</button>
+        </div>
+    </div>
+</div>
+<!-- 批量编辑弹窗 -->
+<div class="modal-overlay" id="bulk-edit-modal">
+    <div class="modal-box">
+        <div class="modal-header">
+            <span class="modal-title">批量编辑选中用户</span>
+            <button class="modal-close" onclick="closeBulkEditModal()">×</button>
+        </div>
+        <div class="alert alert-info mb-2" style="font-size:13px;">
+            将对 <strong id="bulk-edit-count">0</strong> 名用户进行批量更新。<br>
+            <em>留空的字段不会被修改。</em>
+        </div>
+        <div class="mb-1">
+            <label class="form-label">班级</label>
+            <input id="bulk-class" class="form-control" placeholder="留空则不修改">
+        </div>
+        <div class="mb-1">
+            <label class="form-label">角色</label>
+            <select id="bulk-role" class="form-control">
+                <option value="">— 不修改 —</option>
+                <option value="student">学生</option>
+                <option value="teacher">教师</option>
+            </select>
+        </div>
+        <div class="mb-1">
+            <label class="form-label">性别</label>
+            <select id="bulk-gender" class="form-control">
+                <option value="">— 不修改 —</option>
+                <option value="男">男</option>
+                <option value="女">女</option>
+            </select>
+        </div>
+        <div class="mb-1">
+            <label class="form-label">籍贯</label>
+            <input id="bulk-address" class="form-control" placeholder="留空则不修改">
+        </div>
+        <div class="mb-1">
+            <label class="form-label">民族</label>
+            <input id="bulk-ethnicity" class="form-control" placeholder="留空则不修改">
+        </div>
+        <div class="mb-2">
+            <label class="form-label">重置密码（统一改成）</label>
+            <input id="bulk-password" class="form-control" type="password" placeholder="留空则不修改">
+        </div>
+        <div class="flex gap-2">
+            <button type="button" id="btn-do-bulk-edit" class="btn btn-primary">应用更改</button>
+            <button type="button" class="btn btn-outline-primary" onclick="closeBulkEditModal()">取消</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/admin.js"></script>
+{% endblock %}

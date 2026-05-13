@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}登录 - 人脸识别考勤系统{% endblock %}
+{% block content %}
+<div class="login-shell">
+    <div class="login-brand">
+        <div class="login-logo">🎓</div>
+        <h1>ZHZ-人脸识别考勤系统-ZHZ</h1>
+        <p>智能识别 · 高效管理 · 安全可靠</p>
+    </div>
+
+    <div class="card login-card">
+        <p class="text-muted text-sm mb-2 text-center">请选择登录方式</p>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('pwd')">账号密码</button>
+            <button class="tab-btn" onclick="switchTab('face')">人脸识别</button>
+        </div>
+
+        <div class="tab-pane active" id="tab-pwd">
+            <div class="mb-1">
+                <label class="form-label">学号 / 工号</label>
+                <input id="login-id" class="form-control" placeholder="请输入学号或工号">
+            </div>
+            <div class="mb-2">
+                <label class="form-label">密码</label>
+                <input id="login-pwd" class="form-control" type="password" placeholder="请输入密码">
+            </div>
+            <button class="btn btn-primary btn-lg w-full" onclick="pwdLogin()">登录</button>
+        </div>
+
+        <div class="tab-pane" id="tab-face">
+            <div class="text-center mb-2">
+                <video id="login-video" autoplay muted playsinline style="max-width:320px;border-radius:10px;background:#000;"></video>
+                <canvas id="login-canvas" style="display:none;"></canvas>
+            </div>
+            <div id="login-liveness-status" class="liveness-status status-info">点击下方按钮开始活体验证</div>
+            <div class="flex items-center gap-2 mb-2">
+                <span class="text-sm text-muted">张嘴进度：</span>
+                <span id="login-mouth-count" class="font-bold">0 / 1</span>
+            </div>
+            <button id="btn-start-face-login" class="btn btn-primary btn-lg w-full" onclick="startFaceLogin()">开始人脸识别登录</button>
+        </div>
+
+        <div id="login-error" class="alert alert-danger mt-2 d-none"></div>
+
+        <p class="text-sm text-muted mt-2 text-center">
+            还没有账号？<a href="/register">立即注册</a>
+        </p>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/liveness.js"></script>
+<script>
+let loginCamera;
+let loginLiveness;
+
+function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach((b, i) =>
+        b.classList.toggle('active', (i === 0 && tab === 'pwd') || (i === 1 && tab === 'face')));
+    document.getElementById('tab-pwd').classList.toggle('active', tab === 'pwd');
+    document.getElementById('tab-face').classList.toggle('active', tab === 'face');
+}
+
+async function pwdLogin() {
+    const id = document.getElementById('login-id').value.trim();
+    const pwd = document.getElementById('login-pwd').value;
+    if (!id || !pwd) {
+        showError('请填写学号和密码');
+        return;
+    }
+
+    const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, password: pwd }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+        handleLoginSuccess(data);
+    } else {
+        showError(data.error || '登录失败');
+    }
+}
+
+async function startFaceLogin() {
+    const startBtn = document.getElementById('btn-start-face-login');
+    startBtn.disabled = true;
+    hideError();
+
+    try {
+        if (!loginCamera) {
+            loginCamera = new CameraManager(
+                document.getElementById('login-video'),
+                document.getElementById('login-canvas')
+            );
+            await loginCamera.start();
+        }
+    } catch (e) {
+        showError('摄像头启动失败，请检查浏览器权限');
+        startBtn.disabled = false;
+        return;
+    }
+
+    loginLiveness = new LivenessChecker(
+        loginCamera,
+        document.getElementById('login-liveness-status'),
+        document.getElementById('login-mouth-count'),
+        async (sessionToken) => {
+            const statusEl = document.getElementById('login-liveness-status');
+            if (statusEl) {
+                statusEl.textContent = '验证成功！';
+                statusEl.className = 'liveness-status status-success';
+            }
+            try {
+                const b64 = loginCamera.captureFrame();
+                const res = await fetch('/api/auth/face-login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: b64, session_token: sessionToken }),
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    handleLoginSuccess(data);
+                } else {
+                    showError(data.error || '人脸识别失败');
+                    startBtn.disabled = false;
+                }
+            } catch (e) {
+                showError('人脸登录请求失败，请重试');
+                startBtn.disabled = false;
+            }
+        },
+        () => { startBtn.disabled = false; }
+    );
+
+    const started = await loginLiveness.start();
+    if (!started) {
+        startBtn.disabled = false;
+    }
+}
+
+function handleLoginSuccess(data) {
+    localStorage.setItem('token', data.token);
+    if (data.role === 'teacher') {
+        window.location.href = '/admin/dashboard';
+    } else {
+        window.location.href = '/attendance';
+    }
+}
+
+function showError(msg) {
+    const el = document.getElementById('login-error');
+    el.textContent = msg;
+    el.classList.remove('d-none');
+}
+
+function hideError() {
+    const el = document.getElementById('login-error');
+    el.textContent = '';
+    el.classList.add('d-none');
+}
+</script>
+{% endblock %}
